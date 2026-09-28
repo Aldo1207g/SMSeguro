@@ -2,11 +2,13 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
+  NotFoundException,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -61,7 +63,6 @@ export class AuthService {
       INNER JOIN cat_rol_usuario r ON u.id_rol_usuario = r.id_rol_usuario
       WHERE u.correo_electronico = ?
     `;
-
     const usuarios: any = await this.db.query(sql, [dto.correo_electronico]);
 
     if (!Array.isArray(usuarios) || usuarios.length === 0) {
@@ -89,6 +90,34 @@ export class AuthService {
         correo_electronico: usuario.correo_electronico,
         rol: usuario.nombre_rol,
       },
+    };
+  }
+
+  async restablecerContrasena(dto: ResetPasswordDto) {
+    // 1. Validar que el usuario exista
+    const usuarios: any = await this.db.query(
+      'SELECT id_usuario FROM usuario WHERE correo_electronico = ?',
+      [dto.correo_electronico],
+    );
+
+    if (!Array.isArray(usuarios) || usuarios.length === 0) {
+      throw new NotFoundException(
+        'No existe una cuenta registrada con ese correo electrónico',
+      );
+    }
+
+    // 2. Generar el nuevo hash con sal de 10 rondas
+    const nuevoHash = await bcrypt.hash(dto.nueva_contrasena, 10);
+
+    // 3. Actualizar la contraseña en la base de datos
+    await this.db.query(
+      'UPDATE usuario SET contrasena_hash = ? WHERE correo_electronico = ?',
+      [nuevoHash, dto.correo_electronico],
+    );
+
+    return {
+      mensaje:
+        'Contraseña actualizada exitosamente. Ya puedes iniciar sesión con tu nueva clave.',
     };
   }
 }
